@@ -156,9 +156,8 @@ class TestCanBeat:
 
         # Spades > Diamonds, so should win
         assert can_beat(winning_play, last_play)
-        # Clubs < Diamonds, so should lose (even though Clubs > Diamonds is wrong, Diamonds is lowest)
-        # Actually Clubs > Diamonds, so this should win too
-        assert can_beat(losing_play, last_play)
+        # Clubs < Diamonds (new suit ordering), so should lose
+        assert not can_beat(losing_play, last_play)
 
     def test_higher_pair_beats_lower_pair(self):
         """Test that higher pair beats lower pair."""

@@ -38,10 +38,10 @@ class TestCardComparison:
         assert ace_spades > ace_clubs
         assert ace_spades > ace_diamonds
 
-        # Hearts > Clubs > Diamonds
-        assert ace_hearts > ace_clubs
+        # Hearts > Diamonds > Clubs
         assert ace_hearts > ace_diamonds
-        assert ace_clubs > ace_diamonds
+        assert ace_hearts > ace_clubs
+        assert ace_diamonds > ace_clubs
 
     def test_rank_beats_suit(self):
         """Test that rank comparison takes precedence over suit."""
@@ -106,9 +106,9 @@ class TestCardEncoding:
 
     def test_specific_card_encodings(self):
         """Test specific card encodings match expected values."""
-        # 3♦ should be 0
-        three_diamonds = Card(Rank.THREE, Suit.DIAMONDS)
-        assert three_diamonds.to_int() == 0
+        # 3♣ should be 0 (lowest card)
+        three_clubs = Card(Rank.THREE, Suit.CLUBS)
+        assert three_clubs.to_int() == 0
 
         # 3♠ should be 3
         three_spades = Card(Rank.THREE, Suit.SPADES)

@@ -353,14 +353,14 @@ def determine_trick_winner(plays: list[Play]) -> int:
 
 def has_three_of_diamonds(hand: list[Card]) -> bool:
     """
-    Check if a hand contains the 3 of diamonds.
+    Check if a hand contains the 3 of clubs (lowest card).
 
     Args:
         hand: List of cards
 
     Returns:
-        True if the hand contains 3♦
+        True if the hand contains 3♣
     """
     from game.card import Rank, Suit
-    three_diamonds = Card(Rank.THREE, Suit.DIAMONDS)
-    return three_diamonds in hand
+    three_clubs = Card(Rank.THREE, Suit.CLUBS)
+    return three_clubs in hand

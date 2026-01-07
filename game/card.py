@@ -3,7 +3,7 @@ Card representation for the Slave card game.
 
 In this game:
 - Rank ordering: 2 (highest) > A > K > Q > J > 10 > 9 > 8 > 7 > 6 > 5 > 4 > 3 (lowest)
-- Suit ordering: Spades (highest) > Hearts > Clubs > Diamonds (lowest)
+- Suit ordering: Spades (highest) > Hearts > Diamonds > Clubs (lowest)
 - Cards are compared first by rank, then by suit if ranks are equal
 """
 
@@ -30,8 +30,8 @@ class Rank(IntEnum):
 
 class Suit(IntEnum):
     """Card suits with their ordering values."""
-    DIAMONDS = 1  # Lowest
-    CLUBS = 2
+    CLUBS = 1  # Lowest
+    DIAMONDS = 2
     HEARTS = 3
     SPADES = 4  # Highest
 
@@ -108,13 +108,13 @@ class Card:
         Convert card to unique integer ID (0-51).
 
         Encoding: (rank_value - 3) * 4 + (suit_value - 1)
-        This ensures 3♦ = 0 and 2♠ = 51
+        This ensures 3♣ = 0 and 2♠ = 51
 
         Returns:
             Integer from 0 to 51
         """
         rank_index = self.rank - 3  # 3->0, 4->1, ..., 2->12
-        suit_index = self.suit - 1  # DIAMONDS->0, CLUBS->1, HEARTS->2, SPADES->3
+        suit_index = self.suit - 1  # CLUBS->0, DIAMONDS->1, HEARTS->2, SPADES->3
         return rank_index * 4 + suit_index
 
     @staticmethod

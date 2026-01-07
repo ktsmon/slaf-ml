@@ -11,7 +11,7 @@ This project implements a complete RL training pipeline for the Thai card game "
 - **Players:** 4 players, each starting with 13 cards
 - **Objective:** Get rid of all your cards first to become King
 - **Card Ranking:** 2 (highest) > A > K > Q > ... > 3 (lowest)
-- **Suit Ranking:** ♠ > ♥ > ♣ > ♦
+- **Suit Ranking:** ♠ > ♥ > ♦ > ♣
 - **Play Types:** Singles, Pairs, Straights, Four-of-a-kind
 - **Positions:** Players finish as King, Queen, Commoner, or Slave
 - **Card Exchange:** Between rounds, Slave gives best cards to King, Commoner exchanges with Queen

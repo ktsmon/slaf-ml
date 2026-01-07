@@ -54,7 +54,7 @@ slave-card-rl/
 ```python
 """
 Implement:
-- Card class with rank (3-2) and suit (♦♣♥♠)
+- Card class with rank (3-2) and suit (♣♦♥♠)
 - Card comparison logic (rank first, then suit)
 - Card encoding/decoding (0-51 mapping)
 
@@ -68,7 +68,7 @@ Key methods:
 
 **Test criteria:**
 - ✓ 2♠ > A♠ > K♠ > ... > 3♠
-- ✓ A♠ > A♥ > A♣ > A♦ (suit ordering)
+- ✓ A♠ > A♥ > A♦ > A♣ (suit ordering)
 - ✓ All 52 cards have unique integer IDs
 
 #### 1.2 Deck Management (`game/deck.py`)
@@ -146,7 +146,7 @@ State tracking:
 ```
 
 **Test criteria:**
-- ✓ First round starts with 3♦ holder
+- ✓ First round starts with 3♣ holder
 - ✓ Subsequent rounds: Slave exchanges 2 best cards with King
 - ✓ Queen/Commoner exchange 1 card
 - ✓ Special rule: Non-King finishing first makes previous King become Slave
