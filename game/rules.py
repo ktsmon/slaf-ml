@@ -2,10 +2,17 @@
 Game rules and play validation for the Slave card game.
 
 This module implements the complete rule set including:
-- Play type detection (single, pair, straight, four-of-a-kind)
+- Play type detection (single, pair, three-of-a-kind, four-of-a-kind)
 - Play validation
 - Play comparison
 - Valid action generation
+
+Game Rules:
+- Valid plays: single, pair, three-of-a-kind, four-of-a-kind
+- Three-of-a-kind defeats single
+- Four-of-a-kind defeats pair
+- Odds (1, 3 cards) cannot be played on evens (2, 4 cards)
+- Evens cannot be played on odds
 """
 
 from enum import Enum
@@ -18,7 +25,7 @@ class PlayType(Enum):
     PASS = "pass"
     SINGLE = "single"
     PAIR = "pair"
-    STRAIGHT = "straight"
+    THREE_OF_KIND = "three_of_kind"
     FOUR_OF_KIND = "four_of_kind"
 
 
@@ -52,11 +59,12 @@ class Play:
             return PlayType.SINGLE
         elif len(self.cards) == 2:
             return PlayType.PAIR
+        elif len(self.cards) == 3:
+            return PlayType.THREE_OF_KIND
         elif len(self.cards) == 4:
             return PlayType.FOUR_OF_KIND
-        elif len(self.cards) >= 3:
-            return PlayType.STRAIGHT
         else:
+            # 5+ cards are not valid
             raise ValueError(f"Invalid number of cards: {len(self.cards)}")
 
     def is_valid(self) -> bool:
@@ -76,29 +84,19 @@ class Play:
             # Must have exactly 2 cards of the same rank
             return len(self.cards) == 2 and self.cards[0].rank == self.cards[1].rank
 
+        if self.play_type == PlayType.THREE_OF_KIND:
+            # Must have exactly 3 cards of the same rank
+            if len(self.cards) != 3:
+                return False
+            first_rank = self.cards[0].rank
+            return all(card.rank == first_rank for card in self.cards)
+
         if self.play_type == PlayType.FOUR_OF_KIND:
             # Must have exactly 4 cards of the same rank
             if len(self.cards) != 4:
                 return False
             first_rank = self.cards[0].rank
             return all(card.rank == first_rank for card in self.cards)
-
-        if self.play_type == PlayType.STRAIGHT:
-            # Must have at least 3 consecutive cards
-            if len(self.cards) < 3:
-                return False
-
-            # Check if cards are consecutive
-            ranks = [card.rank for card in self.cards]
-            for i in range(len(ranks) - 1):
-                # Special case: 2 cannot be in the middle of a straight
-                if ranks[i] == Rank.TWO:
-                    return False
-                # Check consecutive
-                if ranks[i + 1] != ranks[i] + 1:
-                    return False
-
-            return True
 
         return False
 
@@ -125,6 +123,14 @@ def can_beat(play: Play, last_play: Optional[Play]) -> bool:
     """
     Check if a play can beat the last play.
 
+    Rules:
+    - Single can be beaten by: higher single OR three-of-a-kind
+    - Pair can be beaten by: higher pair OR four-of-a-kind
+    - Three-of-a-kind can only be beaten by higher three-of-a-kind
+    - Four-of-a-kind can only be beaten by higher four-of-a-kind
+    - Odds (1, 3) cannot be played on evens (2, 4)
+    - Evens (2, 4) cannot be played on odds (1, 3)
+
     Args:
         play: The play to check
         last_play: The previous play to beat (None if starting a new trick)
@@ -144,14 +150,22 @@ def can_beat(play: Play, last_play: Optional[Play]) -> bool:
     if not play.is_valid():
         return False
 
-    # Four of a kind beats pairs
+    # Special rule: Three-of-a-kind defeats single
+    if play.play_type == PlayType.THREE_OF_KIND and last_play.play_type == PlayType.SINGLE:
+        return True
+
+    # Special rule: Four-of-a-kind defeats pair
     if play.play_type == PlayType.FOUR_OF_KIND and last_play.play_type == PlayType.PAIR:
         return True
 
-    # Straights beat singles but lose to pairs
-    if play.play_type == PlayType.STRAIGHT and last_play.play_type == PlayType.SINGLE:
-        return True
-    if play.play_type == PlayType.STRAIGHT and last_play.play_type == PlayType.PAIR:
+    # Odds cannot be played on evens, evens cannot be played on odds
+    # Single (1) and Three (3) are odds
+    # Pair (2) and Four (4) are evens
+    play_is_odd = play.play_type in [PlayType.SINGLE, PlayType.THREE_OF_KIND]
+    last_is_odd = last_play.play_type in [PlayType.SINGLE, PlayType.THREE_OF_KIND]
+
+    if play_is_odd != last_is_odd:
+        # Can only play on different parity if using the special defeat rules above
         return False
 
     # Otherwise, must be the same type
@@ -196,8 +210,8 @@ def get_valid_plays(hand: list[Card], last_play: Optional[Play]) -> list[list[Ca
         # Add all pairs
         valid_plays.extend(_get_all_pairs(hand))
 
-        # Add all straights
-        valid_plays.extend(_get_all_straights(hand))
+        # Add all three-of-a-kinds
+        valid_plays.extend(_get_all_three_of_kinds(hand))
 
         # Add all four-of-a-kinds
         valid_plays.extend(_get_all_four_of_kinds(hand))
@@ -208,30 +222,28 @@ def get_valid_plays(hand: list[Card], last_play: Optional[Play]) -> list[list[Ca
         last_high = last_play.get_highest_card()
 
         if last_type == PlayType.SINGLE:
-            # Can play higher singles or straights
+            # Can play higher singles
             for card in hand:
                 if card > last_high:
                     valid_plays.append([card])
 
-            # Can also play straights
-            for straight in _get_all_straights(hand):
-                valid_plays.append(straight)
+            # Can also play three-of-a-kinds (they defeat singles)
+            valid_plays.extend(_get_all_three_of_kinds(hand))
 
         elif last_type == PlayType.PAIR:
-            # Can play higher pairs or four-of-a-kinds
+            # Can play higher pairs
             for pair in _get_all_pairs(hand):
                 if max(pair) > last_high:
                     valid_plays.append(pair)
 
-            # Can also play four-of-a-kinds
+            # Can also play four-of-a-kinds (they defeat pairs)
             valid_plays.extend(_get_all_four_of_kinds(hand))
 
-        elif last_type == PlayType.STRAIGHT:
-            # Can only play higher straights of the same length
-            last_length = len(last_play.cards)
-            for straight in _get_all_straights(hand):
-                if len(straight) == last_length and max(straight) > last_high:
-                    valid_plays.append(straight)
+        elif last_type == PlayType.THREE_OF_KIND:
+            # Can only play higher three-of-a-kinds
+            for three in _get_all_three_of_kinds(hand):
+                if max(three) > last_high:
+                    valid_plays.append(three)
 
         elif last_type == PlayType.FOUR_OF_KIND:
             # Can only play higher four-of-a-kinds
@@ -263,6 +275,27 @@ def _get_all_pairs(hand: list[Card]) -> list[list[Card]]:
     return pairs
 
 
+def _get_all_three_of_kinds(hand: list[Card]) -> list[list[Card]]:
+    """Get all possible three-of-a-kinds from a hand."""
+    threes = []
+    rank_groups = {}
+
+    # Group cards by rank
+    for card in hand:
+        if card.rank not in rank_groups:
+            rank_groups[card.rank] = []
+        rank_groups[card.rank].append(card)
+
+    # Find all three-of-a-kinds
+    for rank, cards in rank_groups.items():
+        if len(cards) >= 3:
+            # Take the highest three (by suit)
+            sorted_cards = sorted(cards, reverse=True)
+            threes.append([sorted_cards[0], sorted_cards[1], sorted_cards[2]])
+
+    return threes
+
+
 def _get_all_four_of_kinds(hand: list[Card]) -> list[list[Card]]:
     """Get all possible four-of-a-kinds from a hand."""
     fours = []
@@ -280,45 +313,6 @@ def _get_all_four_of_kinds(hand: list[Card]) -> list[list[Card]]:
             fours.append(cards)
 
     return fours
-
-
-def _get_all_straights(hand: list[Card]) -> list[list[Card]]:
-    """Get all possible straights from a hand."""
-    straights = []
-
-    if len(hand) < 3:
-        return straights
-
-    # Get unique ranks (sorted)
-    unique_ranks = sorted(set(card.rank for card in hand))
-
-    # Remove TWO as it cannot be in a straight
-    unique_ranks = [r for r in unique_ranks if r != Rank.TWO]
-
-    if len(unique_ranks) < 3:
-        return straights
-
-    # Find all consecutive sequences of length 3 or more
-    for start_idx in range(len(unique_ranks)):
-        for end_idx in range(start_idx + 2, len(unique_ranks)):
-            # Check if consecutive
-            is_consecutive = True
-            for i in range(start_idx, end_idx):
-                if unique_ranks[i + 1] != unique_ranks[i] + 1:
-                    is_consecutive = False
-                    break
-
-            if is_consecutive:
-                # Build the straight by taking the highest card of each rank
-                straight_cards = []
-                for rank in unique_ranks[start_idx:end_idx + 1]:
-                    # Get highest card of this rank
-                    cards_of_rank = [c for c in hand if c.rank == rank]
-                    straight_cards.append(max(cards_of_rank))
-
-                straights.append(straight_cards)
-
-    return straights
 
 
 def determine_trick_winner(plays: list[Play]) -> int:

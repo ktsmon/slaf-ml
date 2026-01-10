@@ -44,13 +44,13 @@ class SlaveEnv(AECEnv):
         self.render_mode = render_mode
         self.num_rounds = num_rounds
 
-        # Action space: 194 possible actions
+        # Action space: 157 possible actions
         # 0: Pass
         # 1-52: Singles
         # 53-130: Pairs
-        # 131-180: Straights
-        # 181-193: Four-of-a-kinds
-        self.action_space_size = 194
+        # 131-143: Three-of-a-kinds
+        # 144-156: Four-of-a-kinds
+        self.action_space_size = 157
 
         # Observation space: 155 features
         self.observation_space_size = 155

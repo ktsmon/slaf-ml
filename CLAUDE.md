@@ -6,15 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a reinforcement learning system for training AI agents to play the Thai "Slave" card game (also known as "President" or "Scum"). Four agents compete through self-play training using the PPO algorithm. The project follows a phased implementation approach.
 
-**Current Status:** Phase 1 complete (core game engine). The game engine includes:
+**Current Status:** Phases 1-3 complete. The system includes:
 - Complete card system with rank and suit representation
 - Deck management with shuffling and dealing
-- Full game rules implementation (singles, pairs, straights, four-of-a-kind)
+- Full game rules implementation (singles, pairs, three-of-a-kind, four-of-a-kind)
 - Game state management with strategic card exchange mechanics
 - PettingZoo environment wrapper
 - State observation encoding for agents
+- Baseline agents: RandomAgent and GreedyAgent (93% win rate vs random)
 
-**Next Phases:** Baseline agents (random, greedy), RL training with PPO, self-play training loop, curriculum learning.
+**Next Phases:** RL training with PPO, self-play training loop, curriculum learning.
 
 ## Common Commands
 
@@ -46,6 +47,9 @@ python example_environment.py
 
 # Test multi-round game play
 python example_multi_round.py
+
+# Run tournament: GreedyAgent vs RandomAgent
+python example_tournament.py
 ```
 
 ### Running the Game
@@ -75,14 +79,18 @@ python main.py --mode test --agents random random random random --games 100
 - `deal(num_players)`: Returns list of hands (13 cards each for 4 players)
 
 **Game Rules (`game/rules.py`)**
-- `PlayType` enum: PASS, SINGLE, PAIR, STRAIGHT, FOUR_OF_KIND
+- `PlayType` enum: PASS, SINGLE, PAIR, THREE_OF_KIND, FOUR_OF_KIND
 - `Play` class: Represents a played combination with type detection
 - Key functions:
-  - `validate_play(cards, last_play)`: Checks if play is legal
-  - `compare_plays(play1, play2)`: Returns -1 (play1 loses), 0 (tie), 1 (play1 wins)
-  - `get_valid_actions(hand, last_play)`: Returns all legal moves
-  - `determine_winner(plays)`: Identifies who won the trick
-- Handles complex rules: pairs beat singles, straights lose to pairs, four-of-a-kind beats pairs, suit tiebreakers for same rank
+  - `can_beat(play, last_play)`: Checks if play beats the last play
+  - `get_valid_plays(hand, last_play)`: Returns all legal moves
+  - `determine_trick_winner(plays)`: Identifies who won the trick
+- Special rules:
+  - Three-of-a-kind defeats single (regardless of rank)
+  - Four-of-a-kind defeats pair (regardless of rank)
+  - Odds (1, 3 cards) cannot be played on evens (2, 4 cards) and vice versa
+  - Same type plays are compared by highest card (rank first, then suit)
+  - Suit tiebreaker: Spades > Hearts > Diamonds > Clubs
 
 **Game State Management (`game/game_state.py`)**
 - `GameState` class: Manages complete game flow
@@ -100,28 +108,28 @@ python main.py --mode test --agents random random random random --games 100
 ### Environment for RL (`environment/`)
 
 **Observation Encoding (`environment/observations.py`)**
-- `ObservationEncoder` class: Converts game state to neural network input
-- Observation vector (~156 features):
+- Converts game state to neural network input
+- Observation vector (155 features):
   - Own hand (52 binary): Which cards you hold
   - Played cards (52 binary): Cards out of play
   - Last play encoding (22 features): Play type (5 one-hot), card ranks (13), suit (4)
-  - Game context (30 features): Positions, cards remaining, round, current player indicator
+  - Game context (29 features): Positions, cards remaining, round, current player indicator
 - `encode_observation(game_state, player_id)`: Returns numpy array
-- `get_action_mask(hand, last_play)`: Returns binary mask of valid actions (194 total)
-- Action space (194 actions):
-  - 52 single cards
-  - 78 possible pairs
-  - ~50 common straights
-  - 13 four-of-a-kind
-  - 1 pass action
+- `get_action_mask(game_state, player_id)`: Returns binary mask of valid actions (157 total)
+- Action space (157 actions):
+  - 0: Pass
+  - 1-52: Single cards
+  - 53-130: Pairs (78 possible pairs)
+  - 131-143: Three-of-a-kinds (13 ranks)
+  - 144-156: Four-of-a-kinds (13 ranks)
 
 **PettingZoo Environment (`environment/slave_env.py`)**
 - `SlaveEnv` class: AEC (Agent Environment Cycle) wrapper
 - Multi-agent environment with 4 players
 - Constructor parameter: `num_rounds` (default: 1) - determines how many rounds to play before episode ends
 - Methods: `reset()`, `step()`, `observe()`, `reward()`, `termination()`, `truncation()`
-- Action space: Discrete(194)
-- Observation space: Box(0, 1, shape=(156,), dtype=float32)
+- Action space: Discrete(157)
+- Observation space: Box(0, 1, shape=(155,), dtype=float32)
 - Reward structure:
   - King (1st): +10
   - Queen (2nd): +5
@@ -135,7 +143,26 @@ python main.py --mode test --agents random random random random --games 100
   - Positions are reassigned after each round
   - Episode only terminates after all N rounds complete
   - Example: `env = SlaveEnv(num_rounds=3)` plays 3 full rounds before ending
-- Integrates with `GameState` and `ObservationEncoder`
+- Integrates with `GameState` and observation encoding functions
+
+### Baseline Agents (`agents/`)
+
+**Base Agent (`agents/base_agent.py`)**
+- `BaseAgent` abstract class: Interface for all agents
+- Methods:
+  - `select_action(observation, action_mask)`: Choose action given state and valid actions
+  - `reset()`: Reset agent state between episodes
+
+**Random Agent (`agents/random_agent.py`)**
+- `RandomAgent`: Selects uniformly from valid actions
+- Supports deterministic seed for reproducibility
+- Serves as baseline for agent comparison
+
+**Greedy Agent (`agents/greedy_agent.py`)**
+- `GreedyAgent`: Rule-based heuristic strategy
+- Strategy: Never pass unless forced, prefer singles > pairs > threes > fours, play lowest cards first
+- Tournament results: 93% win rate vs RandomAgent (100 games)
+- Average position: 1.65 (mostly 1st/2nd place)
 
 ### Testing (`tests/`)
 
@@ -204,13 +231,15 @@ During card exchange phase, King and Slave must submit 2 cards each:
 
 ### Action Encoding
 Actions are integer IDs mapping to card combinations:
-- 0-51: Single cards (by card ID)
-- 52-129: Pairs
-- 130-179: Straights (common patterns)
-- 180-192: Four-of-a-kind
-- 193: Pass
+- 0: Pass
+- 1-52: Single cards (card.to_int() + 1)
+- 53-130: Pairs (78 possible pairs, encoded by rank and suit combination)
+- 131-143: Three-of-a-kinds (13 ranks)
+- 144-156: Four-of-a-kinds (13 ranks)
 
-The `ObservationEncoder.get_action_mask()` ensures only valid moves are selectable.
+Total action space: 157 discrete actions
+
+The `get_action_mask()` function ensures only valid moves are selectable based on current game state.
 
 ## Dependencies
 
@@ -225,18 +254,18 @@ Key packages (see requirements.txt):
 
 ## Next Implementation Steps
 
-### Phase 2: Baseline Agents (agents/)
-- `base_agent.py`: Abstract interface
-- `random_agent.py`: Random valid move selection
-- `greedy_agent.py`: Rule-based heuristics (play low cards early, conserve high cards)
-- Test: Greedy beats random 70%+ of games
+### Phase 3: Baseline Agents (agents/) - ✓ COMPLETE
+- ✓ `base_agent.py`: Abstract interface
+- ✓ `random_agent.py`: Random valid move selection
+- ✓ `greedy_agent.py`: Rule-based heuristics (singles > pairs > threes > fours, play lowest)
+- ✓ Test results: Greedy achieves 93% win rate vs Random (exceeds 70% target)
 
-### Phase 3: RL Training (training/)
+### Phase 4: RL Training (training/)
 - `self_play.py`: Training loop with PPO
 - `evaluator.py`: Performance metrics (win rate, average position, head-to-head)
 - `curriculum.py`: Progressive difficulty (simplified rules → full game)
 
-### Phase 4: Entry Point & Scripts
+### Phase 5: Entry Point & Scripts
 - `main.py`: CLI with modes: train, eval, tournament, watch, play
 - Training pipeline setup with checkpointing and TensorBoard logging
 
@@ -248,6 +277,7 @@ Key packages (see requirements.txt):
 | Environment | `pytest tests/test_environment.py -v` | Environment valid, action masking works |
 | Strategic Exchange | `python example_strategic_exchange.py` | Exchanges work correctly |
 | Full Game | `python example_environment.py` | Complete games play without errors |
+| Baseline Agents | `python example_tournament.py` | GreedyAgent wins 70%+ of games |
 
 ## Development Guidelines
 
@@ -260,12 +290,13 @@ Key packages (see requirements.txt):
 
 ## Important Files to Read First
 
-When starting Phase 2+:
+When starting Phase 4+:
 1. `plan.md`: Detailed implementation roadmap
-2. `game/rules.py`: Play validation logic (needed to understand valid actions)
+2. `game/rules.py`: Play validation logic (special rules for three/four-of-a-kind)
 3. `game/game_state.py`: State transitions and reward calculation
-4. `environment/observations.py`: State-to-vector encoding
-5. `tests/test_strategic_exchange.py`: Example of agent decision-making
+4. `environment/observations.py`: State encoding and action space (157 actions)
+5. `agents/base_agent.py`: Agent interface and patterns
+6. `example_tournament.py`: Agent evaluation and tournament system
 
 ## Common Pitfalls
 

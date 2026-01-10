@@ -75,7 +75,7 @@ def encode_observation(game_state: GameState, player_id: int) -> np.ndarray:
             play_type_map = {
                 PlayType.SINGLE: 0,
                 PlayType.PAIR: 1,
-                PlayType.STRAIGHT: 2,
+                PlayType.THREE_OF_KIND: 2,
                 PlayType.FOUR_OF_KIND: 3,
                 PlayType.PASS: 4
             }
@@ -183,8 +183,10 @@ def encode_action(cards: list[Card]) -> int:
     - 0: Pass
     - 1-52: Single cards (card_id + 1)
     - 53-130: Pairs (78 possible pairs)
-    - 131-180: Straights (50 common straights)
-    - 181-193: Four-of-a-kinds (13 ranks)
+    - 131-143: Three-of-a-kinds (13 ranks)
+    - 144-156: Four-of-a-kinds (13 ranks)
+
+    Total: 157 actions
 
     Args:
         cards: List of cards to play
@@ -207,20 +209,17 @@ def encode_action(cards: list[Card]) -> int:
         pair_id = (rank - 3) * 6 + _get_pair_suit_combination(cards_sorted)
         return 53 + pair_id
 
-    if len(cards) >= 3:
-        play = Play(0, cards)  # Use dummy player_id for encoding
-        if play.play_type == PlayType.STRAIGHT:
-            # Straight: encode as 131 + straight_id
-            # Straight ID based on starting rank
-            starting_rank = min(card.rank.value for card in cards)
-            straight_id = starting_rank - 3
-            return 131 + straight_id
+    if len(cards) == 3:
+        # Three-of-a-kind: encode as 131 + rank_id
+        rank = cards[0].rank.value
+        rank_id = rank - 3
+        return 131 + rank_id
 
-        if play.play_type == PlayType.FOUR_OF_KIND:
-            # Four-of-a-kind: encode as 181 + rank_id
-            rank = cards[0].rank.value
-            rank_id = rank - 3
-            return 181 + rank_id
+    if len(cards) == 4:
+        # Four-of-a-kind: encode as 144 + rank_id
+        rank = cards[0].rank.value
+        rank_id = rank - 3
+        return 144 + rank_id
 
     # Default fallback for unhandled combinations
     return 0
@@ -257,24 +256,25 @@ def decode_action(action_id: int, hand: list[Card]) -> list[Card]:
         # Find two cards of this rank in hand
         cards_of_rank = [card for card in hand if card.rank == rank]
         if len(cards_of_rank) >= 2:
-            return cards_of_rank[:2]
+            # Return highest two cards by suit
+            return sorted(cards_of_rank, reverse=True)[:2]
         return []
 
-    if 131 <= action_id <= 180:
-        # Straight
-        starting_rank_value = (action_id - 131) + 3
+    if 131 <= action_id <= 143:
+        # Three-of-a-kind
+        rank_value = (action_id - 131) + 3
+        rank = Rank(rank_value)
 
-        # Find a straight starting from this rank
-        # Try to find 3 consecutive cards
-        for length in [5, 4, 3]:  # Try longer straights first
-            straight = _find_straight_in_hand(hand, starting_rank_value, length)
-            if straight:
-                return straight
+        # Find three cards of this rank
+        cards_of_rank = [card for card in hand if card.rank == rank]
+        if len(cards_of_rank) >= 3:
+            # Return highest three cards by suit
+            return sorted(cards_of_rank, reverse=True)[:3]
         return []
 
-    if 181 <= action_id <= 193:
+    if 144 <= action_id <= 156:
         # Four-of-a-kind
-        rank_value = (action_id - 181) + 3
+        rank_value = (action_id - 144) + 3
         rank = Rank(rank_value)
 
         # Find four cards of this rank
@@ -316,35 +316,3 @@ def _get_pair_suit_combination(cards: list[Card]) -> int:
     return 0
 
 
-def _find_straight_in_hand(hand: list[Card], starting_rank: int, length: int) -> Optional[list[Card]]:
-    """
-    Find a straight of given length starting from a specific rank.
-
-    Args:
-        hand: Player's hand
-        starting_rank: Starting rank value (3-15)
-        length: Length of straight (3-5)
-
-    Returns:
-        List of cards forming the straight, or None if not found
-    """
-    straight = []
-
-    for i in range(length):
-        target_rank = Rank(starting_rank + i)
-        # Find any card of this rank in hand
-        card_found = None
-        for card in hand:
-            if card.rank == target_rank and card not in straight:
-                card_found = card
-                break
-
-        if card_found:
-            straight.append(card_found)
-        else:
-            return None
-
-    if len(straight) == length:
-        return straight
-
-    return None
